@@ -1,56 +1,94 @@
-// Генерация анонимного ID пользователя (сохраняем в localStorage)
-function getUserId() {
-  let userId = localStorage.getItem('smokingCounterUserId');
-  if (!userId) {
-    userId = 'user_' + Math.random().toString(36).substr(2, 9);
-    localStorage.setItem('smokingCounterUserId', userId);
-  }
-  return userId;
+// Ключ для хранения времени старта в localStorage
+const START_TIME_KEY = 'timer_start_time';
+
+// Элементы DOM
+const daysEl = document.getElementById('days');
+const hoursEl = document.getElementById('hours');
+const minutesEl = document.getElementById('minutes');
+const startBtn = document.getElementById('startBtn');
+const resetBtn = document.getElementById('resetBtn');
+const statusMessage = document.getElementById('statusMessage');
+
+// Функция для форматирования чисел (добавление нуля впереди)
+function formatNumber(num) {
+    return num.toString().padStart(2, '0');
 }
 
-// Функция для получения данных счётчика с сервера
-async function fetchCounter() {
-  const userId = getUserId();
-  try {
-    const response = await fetch(`/api/counter/${userId}`);
-    const data = await response.json();
-    if (data.error) throw new Error(data.error);
-    updateDisplay(data.days, data.startDate);
-  } catch (error) {
-    console.error('Ошибка загрузки счётчика:', error);
-    document.getElementById('days').textContent = 'Ошибка';
-  }
+// Функция обновления отображения времени
+function updateTimerDisplay(days, hours, minutes) {
+    daysEl.textContent = formatNumber(days);
+    hoursEl.textContent = formatNumber(hours);
+    minutesEl.textContent = formatNumber(minutes);
 }
 
-// Функция для сброса счётчика
-async function resetCounter() {
-  if (!confirm('Вы уверены, что хотите сбросить счётчик?')) return;
-  const userId = getUserId();
-  try {
-    await fetch(`/api/reset/${userId}`, { method: 'POST' });
-    fetchCounter(); // Обновляем отображение после сброса
-  } catch (error) {
-    console.error('Ошибка сброса счётчика:', error);
-  }
+// Функция расчёта разницы во времени
+function calculateTimeDifference(startDate) {
+    const now = new Date();
+    const diffMs = now - startDate;
+
+    // Расчёт дней, часов, минут
+    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    return { days, hours, minutes };
 }
 
-// Обновление отображения
-function updateDisplay(days, startDate) {
-  document.getElementById('days').textContent = days;
-  const dayWord = getDayWord(days);
-  document.getElementById('message').textContent =
-    `Вы не курите уже ${days} ${dayWord} с ${new Date(startDate).toLocaleDateString()}! Продолжайте в том же духе!`;
+// Функция запуска таймера
+function startTimer() {
+    // Получаем сохранённое время старта или устанавливаем текущее
+    let startTime = localStorage.getItem(START_TIME_KEY);
+
+    if (!startTime) {
+        // Первый запуск — сохраняем текущее время
+        startTime = new Date().toISOString();
+        localStorage.setItem(START_TIME_KEY, startTime);
+        statusMessage.textContent = 'Таймер запущен! Отсчёт начался.';
+    } else {
+        statusMessage.textContent = 'Таймер уже работает! Продолжаем отсчёт...';
+    }
+
+    // Запускаем обновление каждые секунду
+    updateTimer();
+    setInterval(updateTimer, 1000);
+
+    // Отключаем кнопку «Старт» после запуска
+    startBtn.disabled = true;
+    startBtn.textContent = 'Работает...';
 }
 
-// Функция для правильного склонения слова «день»
-function getDayWord(days) {
-  if (days % 10 === 1 && days % 100 !== 11) return 'день';
-  if ([2, 3, 4].includes(days % 10) && ![12, 13, 14].includes(days % 100)) return 'дня';
-  return 'дней';
+// Функция сброса таймера
+function resetTimer() {
+    if (confirm('Вы уверены, что хотите сбросить таймер?')) {
+        localStorage.removeItem(START_TIME_KEY);
+        updateTimerDisplay(0, 0, 0);
+        statusMessage.textContent = 'Таймер сброшен. Нажмите «Старт» для нового отсчёта.';
+
+        // Включаем кнопку «Старт»
+        startBtn.disabled = false;
+        startBtn.textContent = 'Старт';
+    }
+}
+
+// Основная функция обновления таймера
+function updateTimer() {
+    const startTimeStr = localStorage.getItem(START_TIME_KEY);
+    if (!startTimeStr) return;
+
+    const startTime = new Date(startTimeStr);
+    const { days, hours, minutes } = calculateTimeDifference(startTime);
+    updateTimerDisplay(days, hours, minutes);
 }
 
 // Обработчики событий
-document.getElementById('reset').addEventListener('click', resetCounter);
+startBtn.addEventListener('click', startTimer);
+resetBtn.addEventListener('click', resetTimer);
 
 // Инициализация при загрузке страницы
-document.addEventListener('DOMContentLoaded', fetchCounter);
+document.addEventListener('DOMContentLoaded', function() {
+    // Если есть сохранённое время старта, сразу показываем счётчик
+    if (localStorage.getItem(START_TIME_KEY)) {
+        updateTimer();
+        startBtn.disabled = true;
+        startBtn.textContent = 'Работает...';
+        statusMessage.textContent = 'Таймер продолжает работу. Отсчёт идёт...
